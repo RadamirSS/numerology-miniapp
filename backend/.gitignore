@@ -1,0 +1,30 @@
+# виртуальные окружения
+venv/
+.venv/
+
+# pycache
+__pycache__/
+*.pyc
+
+# IDE мусор
+.idea/
+.vscode/
+
+# системные файлы
+.DS_Store
+
+# виртуальные среды и сервисы
+env/
+*.env
+
+# результаты работы кода
+*.log
+*.sqlite
+*.db
+
+# node
+node_modules/
+
+# build-артефакты
+dist/
+build/
