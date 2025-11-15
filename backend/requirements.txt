@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy
+psycopg2-binary
+python-dotenv
+pydantic[email]
+fastapi-mail
+matplotlib
+# passlib и bcrypt: версии подобраны для совместимости и избежания ошибки "error reading bcrypt version" / "__about__"
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2
+openai>=1.0.0
+numpy
+pdfplumber
