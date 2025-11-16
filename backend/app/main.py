@@ -7,10 +7,17 @@ from . import calculators, matrix_api, auth, users, ai_interpretation
 
 app = FastAPI(title="Numerology Mini App API")
 
-# CORS — для фронта на localhost:5173 и мини-аппа
+# CORS — аккуратная настройка для Vercel фронта и Telegram Web
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://127.0.0.1:5173")
+origins = [
+    FRONTEND_ORIGIN,
+    "http://localhost:5173",
+    "https://web.telegram.org",
+    "https://web.telegram.org/a",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # при желании потом сузим
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
