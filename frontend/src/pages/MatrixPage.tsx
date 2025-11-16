@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { postJSON, getJSON } from "../api";
+import { postJSON, getJSON, normalizeImageUrl } from "../api";
 import type { MatrixState } from "../App";
 import { formatBirthDateInput } from "../utils/format";
 
@@ -45,7 +45,8 @@ export default function MatrixPage({ state, setState }: Props) {
 
     try {
       const resp = await postJSON("/matrix/image", { birth_date });
-      const imageUrl = resp.image_url || resp.imagePath || resp.image_path;
+      const rawImageUrl = resp.image_url || resp.imagePath || resp.image_path;
+      const imageUrl = rawImageUrl ? normalizeImageUrl(rawImageUrl) : null;
       const digitInterpretations = resp.digit_interpretations || null;
       
       setState((prev) => ({
