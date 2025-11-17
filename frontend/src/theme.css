@@ -30,9 +30,9 @@ body {
 .safe-top {
   /* 
     env(safe-area-inset-top, 0px) — для вырезов/статуса,
-    56px — запас под кнопку закрытия Telegram + визуальный отступ
+    72px — запас под кнопку закрытия Telegram + визуальный отступ
   */
-  padding-top: calc(env(safe-area-inset-top, 0px) + 56px) !important;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 72px) !important;
 }
 
 .tabbar {
