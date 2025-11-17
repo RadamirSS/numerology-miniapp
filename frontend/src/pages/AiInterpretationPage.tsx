@@ -1,14 +1,9 @@
 import { useEffect } from "react";
 import jsPDF from "jspdf";
-import { postJSON, getJSON } from "../api";
+import { postJSON } from "../api";
 import { formatBirthDateInput } from "../utils/format";
 import type { AiState } from "../App";
-
-declare global {
-  interface Window {
-    Telegram?: any;
-  }
-}
+import { useUserStore } from "../store/userStore";
 
 interface Props {
   state: AiState;
@@ -16,25 +11,14 @@ interface Props {
 }
 
 export default function AiInterpretationPage({ state, setState }: Props) {
+  const { profile } = useUserStore();
 
-  // Пытаемся подтянуть дату рождения пользователя из Telegram (только если не заполнена)
+  // Автоматически подставляем дату из профиля, если она есть и поле пустое
   useEffect(() => {
-    if (state.birthDate) return; // Если дата уже есть, не перезаписываем
-    
-    const tg = window.Telegram?.WebApp;
-    const id = tg?.initDataUnsafe?.user?.id;
-    if (!id) return;
-    
-    getJSON(`/users/by-telegram/${id}`)
-      .then((u) => {
-        if (u.birth_date) {
-          setState((prev) => ({ ...prev, birthDate: u.birth_date }));
-        }
-      })
-      .catch(() => {
-        // Игнорируем ошибки
-      });
-  }, [state.birthDate, setState]);
+    if (profile?.birth_date && !state.birthDate) {
+      setState((prev) => ({ ...prev, birthDate: profile.birth_date }));
+    }
+  }, [profile?.birth_date, state.birthDate]);
 
   function handleDateChange(value: string) {
     const formatted = formatBirthDateInput(value);

@@ -34,15 +34,26 @@ body {
   display: flex;
   border-top: 1px solid var(--border-soft);
   background: rgba(1, 10, 8, 0.95);
+  padding-bottom: env(safe-area-inset-bottom, 8px);
+  margin-bottom: 8px;
+  min-height: 64px;
+  align-items: center;
 }
 
 .tabbar button {
   flex: 1;
-  padding: 10px 0;
+  padding: 14px 8px;
   background: transparent;
   color: var(--text-muted);
   border: none;
-  font-size: 13px;
+  font-size: 14px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, background 0.2s;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .tabbar button.active {

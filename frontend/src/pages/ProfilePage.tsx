@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import { postJSON, getJSON } from "../api";
-import type { UserInfo } from "../App";
+import { useEffect, useState, useRef } from "react";
+import { useUserStore } from "../store/userStore";
 import { formatBirthDateInput, formatNameInput } from "../utils/format";
+import { processAvatarFile } from "../utils/avatar";
+import { normalizeImageUrl } from "../api";
 
 // URL поддержки из переменных окружения
 const SUPPORT_URL = import.meta.env.VITE_SUPPORT_URL;
@@ -12,286 +13,196 @@ declare global {
   }
 }
 
-interface ProfilePageProps {
-  currentUser: UserInfo | null;
-  setCurrentUser: (user: UserInfo | null) => void;
-}
-
-export default function ProfilePage({ currentUser, setCurrentUser }: ProfilePageProps) {
-  const [mode, setMode] = useState<"login" | "register">("login");
-  const [step, setStep] = useState<"form" | "verify" | "done">("form");
+export default function ProfilePage() {
+  const { profile, loading, error, loadProfileFromTelegram, updateProfile } = useUserStore();
+  const [isEditing, setIsEditing] = useState(false);
+  const [isTariffModalOpen, setTariffModalOpen] = useState(false);
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   
-  // Telegram данные
-  const [telegramId, setTelegramId] = useState<number | null>(null);
-  const [telegramUser, setTelegramUser] = useState<any>(null);
-  
-  // Форма регистрации
+  // Поля для редактирования
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [birthDate, setBirthDate] = useState("");
-  const [password, setPassword] = useState("");
-  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarObjectUrl, setAvatarObjectUrl] = useState<string | null>(null);
   
-  // Форма логина
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  
-  // Верификация
-  const [code, setCode] = useState("");
-  
-  // Состояния
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [user, setUser] = useState<UserInfo | null>(currentUser);
-  const [isTariffModalOpen, setTariffModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const avatarMenuRef = useRef<HTMLDivElement>(null);
 
-  // Синхронизация с currentUser из пропсов
+  // Загрузка профиля при монтировании
   useEffect(() => {
-    if (currentUser) {
-      setUser(currentUser);
-      setStep("done");
+    if (!profile) {
+      loadProfileFromTelegram();
     }
-  }, [currentUser]);
+  }, []);
 
-  // Инициализация Telegram данных при монтировании
+  // Синхронизация полей с профилем
   useEffect(() => {
-    // Если пользователь уже залогинен, не загружаем по Telegram ID
-    if (currentUser) {
-      return;
+    if (profile) {
+      setName(profile.name || "");
+      setEmail(profile.email || "");
+      setPhone(profile.phone || "");
+      setBirthDate(profile.birth_date || "");
+      setAvatarUrl(profile.avatar_url || null);
+    }
+  }, [profile]);
+
+  // Очистка object URL при размонтировании
+  useEffect(() => {
+    return () => {
+      if (avatarObjectUrl) {
+        URL.revokeObjectURL(avatarObjectUrl);
+      }
+    };
+  }, [avatarObjectUrl]);
+
+  // Закрытие меню аватара при клике вне его
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (avatarMenuRef.current && !avatarMenuRef.current.contains(event.target as Node)) {
+        setAvatarMenuOpen(false);
+      }
     }
     
-    const tg = window.Telegram?.WebApp;
-    if (tg?.initDataUnsafe?.user) {
-      const tgUser = tg.initDataUnsafe.user;
-      const id = tgUser.id;
-      setTelegramId(id);
-      setTelegramUser(tgUser);
-      
-      // Пытаемся загрузить пользователя по Telegram ID
-      loadUserByTelegram(id);
+    if (avatarMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
     }
-  }, [currentUser]);
-
-  async function loadUserByTelegram(id: number) {
-    try {
-      const data = await getJSON(`/users/by-telegram/${id}`);
-      setUser(data);
-      setCurrentUser(data);
-      setStep("done");
-    } catch {
-      // Пользователь не найден - это нормально
-    }
-  }
+  }, [avatarMenuOpen]);
 
   // Валидация email
   function validateEmail(email: string): boolean {
+    if (!email) return true; // email необязателен
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
   }
 
-  // Валидация телефона
-  function validatePhone(phone: string): boolean {
-    if (!phone) return true; // телефон необязателен
-    const digits = phone.replace(/\D/g, "");
-    return digits.length >= 7 && digits.length <= 15;
+  // Валидация даты рождения
+  function validateBirthDate(date: string): boolean {
+    if (!date) return true; // дата необязательна
+    return /^\d{2}\.\d{2}\.\d{4}$/.test(date);
   }
 
-  // Форматирование телефона (только цифры)
-  function formatPhoneInput(raw: string): string {
-    return raw.replace(/\D/g, "").slice(0, 15);
-  }
+  // Обработка загрузки аватара
+  async function handleAvatarSelect(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-  // Обработка логина
-  async function handleLogin() {
-    setError(null);
-    setLoading(true);
-    
     try {
-      if (!loginEmail || !loginPassword) {
-        throw new Error("Заполните все поля");
-      }
-
-      if (!validateEmail(loginEmail)) {
-        throw new Error("Неверный формат email");
-      }
+      const base64 = await processAvatarFile(file);
+      // Сохраняем base64 как avatar_url (в продакшене можно загрузить на сервер и получить URL)
+      setAvatarUrl(base64);
       
-      const response = await postJSON("/auth/login", {
-        email: loginEmail,
-        password: loginPassword,
+      // Создаём object URL для предпросмотра
+      if (avatarObjectUrl) {
+        URL.revokeObjectURL(avatarObjectUrl);
+      }
+      const objectUrl = URL.createObjectURL(file);
+      setAvatarObjectUrl(objectUrl);
+      
+      // Если режим редактирования включен, сохраняем сразу
+      if (isEditing) {
+        await updateProfile({ avatar_url: base64 });
+      }
+    } catch (err: any) {
+      alert(err.message || "Ошибка загрузки аватара");
+    }
+    
+    // Очищаем input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    setAvatarMenuOpen(false);
+  }
+
+  // Открытие диалога выбора файла
+  function handleChangeAvatarClick() {
+    fileInputRef.current?.click();
+  }
+
+  // Включение режима редактирования
+  function handleEditClick() {
+    setIsEditing(true);
+    setAvatarMenuOpen(false);
+  }
+
+  // Сохранение изменений
+  async function handleSave() {
+    // Валидация
+    if (name.trim() === "") {
+      alert("Имя не может быть пустым");
+      return;
+    }
+    
+    if (email && !validateEmail(email)) {
+      alert("Неверный формат email");
+      return;
+    }
+    
+    if (birthDate && !validateBirthDate(birthDate)) {
+      alert("Дата рождения должна быть в формате ДД.ММ.ГГГГ");
+      return;
+    }
+
+    try {
+      await updateProfile({
+        name: formatNameInput(name.trim()),
+        email: email.trim() || undefined,
+        phone: phone || null,
+        birth_date: birthDate || "",
+        avatar_url: avatarUrl || null,
       });
-      
-      if (response.status === "ok" && response.user) {
-        setUser(response.user);
-        setCurrentUser(response.user);
-        setStep("done");
-        setLoginEmail("");
-        setLoginPassword("");
-      }
+      setIsEditing(false);
+      setAvatarMenuOpen(false);
     } catch (err: any) {
-      // Очистка полей при неверном логине
-      setLoginEmail("");
-      setLoginPassword("");
-      setError("⚠️ Неверный e-mail или пароль");
-    } finally {
-      setLoading(false);
+      alert(err.message || "Ошибка сохранения профиля");
     }
   }
 
-  // Обработка регистрации
-  async function handleRegister() {
-    setError(null);
-    setLoading(true);
+  // Отмена редактирования
+  function handleCancel() {
+    if (profile) {
+      setName(profile.name || "");
+      setEmail(profile.email || "");
+      setPhone(profile.phone || "");
+      setBirthDate(profile.birth_date || "");
+      setAvatarUrl(profile.avatar_url || null);
+    }
+    setIsEditing(false);
+    setAvatarMenuOpen(false);
     
-    try {
-      // Валидация
-      if (!name || !name.trim()) {
-        throw new Error("Имя обязательно");
-      }
-
-      if (!email || !email.trim()) {
-        throw new Error("Email обязателен");
-      }
-
-      if (!validateEmail(email)) {
-        throw new Error("Неверный формат email");
-      }
-
-      if (phone && !validatePhone(phone)) {
-        throw new Error("Телефон должен содержать от 7 до 15 цифр");
-      }
-      
-      if (!birthDate || !/^\d{2}\.\d{2}\.\d{4}$/.test(birthDate)) {
-        throw new Error("Дата рождения должна быть в формате дд.мм.гггг");
-      }
-      
-      if (password.length < 6) {
-        throw new Error("Пароль должен быть не короче 6 символов");
-      }
-      
-      if (password !== passwordConfirm) {
-        throw new Error("Пароли не совпадают");
-      }
-      
-      // Формирование payload с отформатированным именем
-      const formattedName = formatNameInput(name);
-      const payload: any = {
-        name: formattedName,
-        email: email.trim().toLowerCase(),
-        phone: phone ? phone.replace(/\D/g, "") : null,
-        birth_date: birthDate,
-        // Тариф не выбирается при регистрации - будет установлен по умолчанию на бэке
-        tariff: null,
-        password,
-        password_confirm: passwordConfirm,
-      };
-      
-      // Добавление Telegram данных, если есть
-      if (telegramId) {
-        payload.telegram_id = telegramId;
-        if (telegramUser) {
-          payload.telegram_username = telegramUser.username || null;
-          payload.telegram_first_name = telegramUser.first_name || null;
-          payload.telegram_last_name = telegramUser.last_name || null;
-          payload.telegram_raw = telegramUser;
-        }
-      }
-      
-      const response = await postJSON("/auth/register", payload);
-      
-      if (response.status === "ok" && response.user) {
-        setUser(response.user);
-        setStep("verify");
-      }
-    } catch (err: any) {
-      setError(err.message || "Ошибка регистрации");
-    } finally {
-      setLoading(false);
+    // Очищаем временный object URL
+    if (avatarObjectUrl) {
+      URL.revokeObjectURL(avatarObjectUrl);
+      setAvatarObjectUrl(null);
     }
   }
 
-  // Обработка верификации email
-  async function handleVerify() {
-    setError(null);
-    setLoading(true);
-    
-    try {
-      if (!code || code.length !== 6) {
-        throw new Error("Введите 6-значный код");
-      }
-      
-      const response = await postJSON("/auth/verify-email", {
-        email: user?.email || email,
-        code,
-      });
-      
-      if (response.status === "ok" && response.user) {
-        setUser(response.user);
-        setCurrentUser(response.user);
-        setStep("done");
-        setCode("");
-      }
-    } catch (err: any) {
-      setError(err.message || "Неверный код");
-    } finally {
-      setLoading(false);
+  // Получение URL аватара для отображения
+  function getAvatarDisplayUrl(): string | null {
+    if (avatarObjectUrl) return avatarObjectUrl; // Временный URL для предпросмотра
+    if (avatarUrl) {
+      // Если это base64, возвращаем как есть, иначе нормализуем
+      if (avatarUrl.startsWith("data:")) return avatarUrl;
+      return normalizeImageUrl(avatarUrl);
     }
+    // Пытаемся получить из Telegram
+    const tg = window.Telegram?.WebApp;
+    const tgUser = tg?.initDataUnsafe?.user;
+    if (tgUser?.photo_url) return tgUser.photo_url;
+    return null;
   }
 
-  // Выход
-  function handleLogout() {
-    setUser(null);
-    setCurrentUser(null);
-    setMode("login");
-    setStep("form");
-    setError(null);
-    // Очистка полей
-    setName("");
-    setEmail("");
-    setPhone("");
-    setBirthDate("");
-    setPassword("");
-    setPasswordConfirm("");
-    setTariffModalOpen(false);
-    setLoginEmail("");
-    setLoginPassword("");
-    setCode("");
-  }
-
-  // Переключение режима
-  function switchMode(newMode: "login" | "register") {
-    setMode(newMode);
-    setStep("form");
-    setError(null);
-  }
-
-  // Обработка "Забыли пароль?"
-  function handleForgotPassword() {
-    alert("Функция восстановления пароля появится позже…");
-  }
-
-  // Обработка клика на поддержку
-  function handleSupportClick() {
-    if (!SUPPORT_URL) return;
-    window.open(SUPPORT_URL, "_blank");
-  }
-
-  // Открытие модального окна выбора тарифа
-  function openTariffModal() {
-    setTariffModalOpen(true);
-  }
-
-  // Закрытие модального окна
-  function closeTariffModal() {
-    setTariffModalOpen(false);
-  }
-
-  // Обработка выбора тарифа
-  function handleSelectTariff(tariffId: string) {
-    // TODO: позже здесь будет переход к оплате
-    console.log("Selected tariff:", tariffId);
-    // Можно сразу закрывать модалку:
-    setTariffModalOpen(false);
+  // Получение имени пользователя для отображения
+  function getDisplayName(): string {
+    if (profile?.name) return profile.name;
+    const tg = window.Telegram?.WebApp;
+    const tgUser = tg?.initDataUnsafe?.user;
+    if (tgUser?.first_name) {
+      return tgUser.last_name ? `${tgUser.first_name} ${tgUser.last_name}` : tgUser.first_name;
+    }
+    return "Пользователь";
   }
 
   // Получение названия тарифа для отображения
@@ -305,282 +216,385 @@ export default function ProfilePage({ currentUser, setCurrentUser }: ProfilePage
     return names[tariff] || tariff;
   }
 
-  // Если пользователь залогинен
-  if (step === "done" && user) {
+  // Обработка клика на поддержку
+  function handleSupportClick() {
+    if (!SUPPORT_URL) return;
+    window.open(SUPPORT_URL, "_blank");
+  }
+
+  // Обработка выбора тарифа
+  function handleSelectTariff(tariffId: string) {
+    // TODO: позже здесь будет переход к оплате
+    setTariffModalOpen(false);
+  }
+
+  const avatarDisplayUrl = getAvatarDisplayUrl();
+  const displayName = getDisplayName();
+
+  if (loading && !profile) {
     return (
-      <>
-        <div className="card">
-          <h2>Ваш профиль</h2>
-          
-          <div style={{ marginTop: 16 }}>
-            <p><strong>Имя:</strong> {user.name}</p>
-            <p>
-              <strong>Email:</strong> {user.email}{" "}
-              {user.is_email_verified ? "✅" : "⏳"}
-              {user.is_email_verified ? " подтверждён" : " не подтверждён"}
-            </p>
-            {user.phone && <p><strong>Телефон:</strong> {user.phone}</p>}
-            <p><strong>Дата рождения:</strong> {user.birth_date}</p>
+      <div className="card">
+        <p>Загрузка профиля...</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="card">
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
+          {/* Аватар */}
+          <div style={{ position: "relative" }}>
+            <div
+              onClick={() => setAvatarMenuOpen(!avatarMenuOpen)}
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: "50%",
+                backgroundColor: "var(--border-soft)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                overflow: "hidden",
+                border: "2px solid var(--gold)",
+              }}
+            >
+              {avatarDisplayUrl ? (
+                <img
+                  src={avatarDisplayUrl}
+                  alt="Аватар"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                <span style={{ fontSize: 24 }}>👤</span>
+              )}
+            </div>
             
-            {/* Блок с тарифом и кнопкой изменения */}
-            <div className="profile-tariff" style={{ marginTop: 16, marginBottom: 16 }}>
+            {/* Меню смены аватара */}
+            {avatarMenuOpen && (
+              <div
+                ref={avatarMenuRef}
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  marginTop: 8,
+                  backgroundColor: "var(--bg-card)",
+                  border: "1px solid var(--gold)",
+                  borderRadius: 8,
+                  padding: 8,
+                  zIndex: 1000,
+                  minWidth: 150,
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)",
+                }}
+              >
+                <button
+                  onClick={handleChangeAvatarClick}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-main)",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    borderRadius: 4,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "rgba(242, 201, 76, 0.1)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                >
+                  Сменить аватар
+                </button>
+              </div>
+            )}
+          </div>
+          
+          {/* Имя пользователя */}
+          <div style={{ flex: 1 }}>
+            <h2 style={{ margin: 0 }}>{displayName}</h2>
+            {profile?.telegram_username && (
+              <p style={{ margin: "4px 0 0 0", fontSize: 13, color: "var(--text-muted)" }}>
+                @{profile.telegram_username}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={handleAvatarSelect}
+        />
+
+        {/* Поля профиля */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Имя */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <label style={{ fontSize: 14, fontWeight: 500 }}>Имя пользователя</label>
+              {isEditing && (
+                <button
+                  onClick={() => {
+                    // Можно добавить логику для редактирования конкретного поля
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--accent-light)",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    textDecoration: "underline",
+                  }}
+                >
+                  Изменить
+                </button>
+              )}
+            </div>
+            {isEditing ? (
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => {
+                  const formatted = formatNameInput(e.target.value);
+                  setName(formatted);
+                }}
+                placeholder="Введите имя"
+              />
+            ) : (
+              <div style={{ padding: "10px 12px", borderRadius: 999, border: "1px solid var(--border-soft)", backgroundColor: "rgba(1, 12, 10, 0.9)" }}>
+                {profile?.name || "Не указано"}
+              </div>
+            )}
+          </div>
+
+          {/* Телефон */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <label style={{ fontSize: 14, fontWeight: 500 }}>Номер телефона</label>
+              {isEditing && (
+                <button
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: profile?.phone ? "var(--accent-light)" : "var(--gold)",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    textDecoration: "underline",
+                  }}
+                >
+                  {profile?.phone ? "Изменить" : "Добавить"}
+                </button>
+              )}
+            </div>
+            {isEditing ? (
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => {
+                  const formatted = e.target.value.replace(/\D/g, "").slice(0, 15);
+                  setPhone(formatted);
+                }}
+                placeholder="Введите номер телефона"
+              />
+            ) : (
+              <div style={{ padding: "10px 12px", borderRadius: 999, border: "1px solid var(--border-soft)", backgroundColor: "rgba(1, 12, 10, 0.9)" }}>
+                {profile?.phone || "Не указано"}
+              </div>
+            )}
+          </div>
+
+          {/* Дата рождения */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <label style={{ fontSize: 14, fontWeight: 500 }}>Дата рождения</label>
+              {isEditing && (
+                <button
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: profile?.birth_date ? "var(--accent-light)" : "var(--gold)",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    textDecoration: "underline",
+                  }}
+                >
+                  {profile?.birth_date ? "Изменить" : "Добавить"}
+                </button>
+              )}
+            </div>
+            {isEditing ? (
+              <input
+                type="text"
+                value={birthDate}
+                onChange={(e) => {
+                  const formatted = formatBirthDateInput(e.target.value);
+                  setBirthDate(formatted);
+                }}
+                placeholder="ДД.ММ.ГГГГ"
+                maxLength={10}
+              />
+            ) : (
+              <div style={{ padding: "10px 12px", borderRadius: 999, border: "1px solid var(--border-soft)", backgroundColor: "rgba(1, 12, 10, 0.9)" }}>
+                {profile?.birth_date || "Не указано"}
+              </div>
+            )}
+          </div>
+
+          {/* Email */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <label style={{ fontSize: 14, fontWeight: 500 }}>
+                Email {profile?.is_email_verified && "✅"}
+              </label>
+              {isEditing && (
+                <button
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: profile?.email ? "var(--accent-light)" : "var(--gold)",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    textDecoration: "underline",
+                  }}
+                >
+                  {profile?.email ? "Изменить" : "Добавить"}
+                </button>
+              )}
+            </div>
+            {isEditing ? (
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Введите email"
+              />
+            ) : (
+              <div style={{ padding: "10px 12px", borderRadius: 999, border: "1px solid var(--border-soft)", backgroundColor: "rgba(1, 12, 10, 0.9)" }}>
+                {profile?.email || "Не указано"}
+              </div>
+            )}
+          </div>
+
+          {/* Тариф */}
+          {profile && (
+            <div className="profile-tariff" style={{ marginTop: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <span className="profile-tariff__label"><strong>Текущий тариф:</strong></span>
-                <span className="profile-tariff__value">{getTariffDisplayName(user.tariff)}</span>
+                <span className="profile-tariff__value">{getTariffDisplayName(profile.tariff)}</span>
               </div>
               <button 
                 className="primary-button" 
-                onClick={openTariffModal}
+                onClick={() => setTariffModalOpen(true)}
                 style={{ marginTop: 8, width: "auto", minWidth: "150px" }}
               >
                 Изменить тариф
               </button>
             </div>
-            
-            {user.telegram_id && (
-              <>
-                <p><strong>Telegram ID:</strong> {user.telegram_id}</p>
-                {user.telegram_username && (
-                  <p><strong>Telegram username:</strong> @{user.telegram_username}</p>
-                )}
-              </>
-            )}
-          </div>
-          
-          {/* Кнопка поддержки */}
-          {SUPPORT_URL && (
-            <button 
-              onClick={handleSupportClick}
-              className="primary-button"
-              style={{ marginTop: 16 }}
-            >
-              Поддержка
-            </button>
           )}
-          
-          <button 
-            onClick={handleLogout} 
-            className="btn-primary"
-            style={{ marginTop: 16 }}
-          >
-            Выйти
-          </button>
         </div>
 
-        {/* Модальное окно выбора тарифа */}
-        {isTariffModalOpen && (
-          <div className="modal-overlay" onClick={closeTariffModal}>
-            <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h2>Выберите тариф</h2>
-                <button className="modal-close" onClick={closeTariffModal}>×</button>
-              </div>
-              
-              <div className="tariff-list">
-                {/* Тариф Бесплатный */}
-                <div className="tariff-card">
-                  <h3>Бесплатный</h3>
-                  <p>Базовый доступ к калькуляторам и основным функциям приложения.</p>
-                  <button
-                    className="primary-button"
-                    onClick={() => handleSelectTariff("free")}
-                  >
-                    Выбрать «Бесплатный»
-                  </button>
-                </div>
+        {/* Кнопки управления */}
+        <div style={{ marginTop: 24, display: "flex", gap: 12 }}>
+          {isEditing ? (
+            <>
+              <button 
+                onClick={handleSave} 
+                disabled={loading}
+                className="btn-primary"
+                style={{ flex: 1 }}
+              >
+                {loading ? "Сохранение..." : "Сохранить"}
+              </button>
+              <button 
+                onClick={handleCancel} 
+                className="primary-button"
+                style={{ flex: 1 }}
+              >
+                Отмена
+              </button>
+            </>
+          ) : (
+            <button 
+              onClick={handleEditClick} 
+              className="btn-primary"
+              style={{ width: "100%" }}
+            >
+              Редактировать профиль
+            </button>
+          )}
+        </div>
 
-                {/* Тариф Базовый */}
-                <div className="tariff-card">
-                  <h3>Базовый</h3>
-                  <p>Расширенный доступ к расчётам, большее количество запросов к калькуляторам.</p>
-                  <button
-                    className="primary-button"
-                    onClick={() => handleSelectTariff("basic")}
-                  >
-                    Выбрать «Базовый»
-                  </button>
-                </div>
-
-                {/* Тариф Профессиональный */}
-                <div className="tariff-card">
-                  <h3>Профессиональный</h3>
-                  <p>Полный доступ ко всем функциям, включая AI-интерпретации и неограниченное количество расчётов.</p>
-                  <button
-                    className="primary-button"
-                    onClick={() => handleSelectTariff("pro")}
-                  >
-                    Выбрать «Профессиональный»
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+        {/* Кнопка поддержки */}
+        {SUPPORT_URL && (
+          <button 
+            onClick={handleSupportClick}
+            className="primary-button"
+            style={{ marginTop: 12 }}
+          >
+            Поддержка
+          </button>
         )}
-      </>
-    );
-  }
 
-  // Форма верификации email
-  if (step === "verify") {
-    return (
-      <div className="card">
-        <h2>Подтверждение email</h2>
-        
-        <p style={{ marginTop: 16, fontSize: 14 }}>
-          Мы отправили код на email <strong>{user?.email || email}</strong>.
-          В dev-режиме код также выводится в лог сервера.
-        </p>
-        
         {error && (
-          <div className="error-message">
+          <div className="error-message" style={{ marginTop: 16 }}>
             <span className="error-icon">⚠️</span> {error}
           </div>
         )}
-        
-        <input
-          type="text"
-          placeholder="Код подтверждения"
-          value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-          style={{ marginTop: 16 }}
-          maxLength={6}
-        />
-        
-        <button 
-          onClick={handleVerify} 
-          disabled={loading}
-          className="btn-primary"
-          style={{ marginTop: 12 }}
-        >
-          {loading ? "Проверка..." : "Подтвердить"}
-        </button>
-      </div>
-    );
-  }
-
-  // Формы логина/регистрации
-  return (
-    <div className="card">
-      <div className="auth-toggle">
-        <button
-          onClick={() => switchMode("login")}
-          className={mode === "login" ? "active" : ""}
-        >
-          Войти
-        </button>
-        <button
-          onClick={() => switchMode("register")}
-          className={mode === "register" ? "active" : ""}
-        >
-          Зарегистрироваться
-        </button>
       </div>
 
-      {error && (
-        <div className="error-message">
-          <span className="error-icon">⚠️</span> {error}
+      {/* Модальное окно выбора тарифа */}
+      {isTariffModalOpen && (
+        <div className="modal-overlay" onClick={() => setTariffModalOpen(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Выберите тариф</h2>
+              <button className="modal-close" onClick={() => setTariffModalOpen(false)}>×</button>
+            </div>
+            
+            <div className="tariff-list">
+              <div className="tariff-card">
+                <h3>Бесплатный</h3>
+                <p>Базовый доступ к калькуляторам и основным функциям приложения.</p>
+                <button
+                  className="primary-button"
+                  onClick={() => handleSelectTariff("free")}
+                >
+                  Выбрать «Бесплатный»
+                </button>
+              </div>
+
+              <div className="tariff-card">
+                <h3>Базовый</h3>
+                <p>Расширенный доступ к расчётам, большее количество запросов к калькуляторам.</p>
+                <button
+                  className="primary-button"
+                  onClick={() => handleSelectTariff("basic")}
+                >
+                  Выбрать «Базовый»
+                </button>
+              </div>
+
+              <div className="tariff-card">
+                <h3>Профессиональный</h3>
+                <p>Полный доступ ко всем функциям, включая AI-интерпретации и неограниченное количество расчётов.</p>
+                <button
+                  className="primary-button"
+                  onClick={() => handleSelectTariff("pro")}
+                >
+                  Выбрать «Профессиональный»
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
-
-      {mode === "login" ? (
-        <>
-          <h2>Вход</h2>
-          <input
-            type="email"
-            placeholder="Email"
-            value={loginEmail}
-            onChange={(e) => setLoginEmail(e.target.value)}
-            style={{ marginTop: 16 }}
-          />
-          <input
-            type="password"
-            placeholder="Пароль"
-            value={loginPassword}
-            onChange={(e) => setLoginPassword(e.target.value)}
-            style={{ marginTop: 12 }}
-          />
-          <button 
-            type="button"
-            className="text-button"
-            onClick={handleForgotPassword}
-            style={{ marginTop: 8 }}
-          >
-            Забыли пароль?
-          </button>
-          <button 
-            onClick={handleLogin} 
-            disabled={loading}
-            className="btn-primary"
-            style={{ marginTop: 16 }}
-          >
-            {loading ? "Вход..." : "Войти"}
-          </button>
-        </>
-      ) : (
-        <>
-          <h2>Регистрация</h2>
-          <input
-            type="text"
-            placeholder="Имя *"
-            value={name}
-            onChange={(e) => {
-              const formatted = formatNameInput(e.target.value);
-              setName(formatted);
-            }}
-            style={{ marginTop: 16 }}
-          />
-          <input
-            type="email"
-            placeholder="E-mail *"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{ marginTop: 12 }}
-          />
-          <input
-            type="tel"
-            placeholder="Телефон"
-            value={phone}
-            onChange={(e) => {
-              const formatted = formatPhoneInput(e.target.value);
-              setPhone(formatted);
-            }}
-            style={{ marginTop: 12 }}
-          />
-          <input
-            type="text"
-            placeholder="Дата рождения (дд.мм.гггг) *"
-            value={birthDate}
-            onChange={(e) => {
-              const formatted = formatBirthDateInput(e.target.value);
-              setBirthDate(formatted);
-            }}
-            style={{ marginTop: 12 }}
-            maxLength={10}
-          />
-          <input
-            type="password"
-            placeholder="Пароль (мин. 6 символов) *"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ marginTop: 12 }}
-          />
-          <input
-            type="password"
-            placeholder="Повторите пароль *"
-            value={passwordConfirm}
-            onChange={(e) => setPasswordConfirm(e.target.value)}
-            style={{ marginTop: 12 }}
-          />
-          <button 
-            onClick={handleRegister} 
-            disabled={loading}
-            className="btn-primary"
-            style={{ marginTop: 16 }}
-          >
-            {loading ? "Регистрация..." : "Зарегистрироваться"}
-          </button>
-        </>
-      )}
-    </div>
+    </>
   );
 }

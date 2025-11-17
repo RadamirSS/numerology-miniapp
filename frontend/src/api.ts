@@ -28,9 +28,9 @@ export function normalizeImageUrl(raw: string): string {
   return `${API_URL}${url}`;
 }
 
-export async function postJSON(path: string, body: any) {
+export async function postJSON(path: string, body: any, method: string = "POST") {
   const res = await fetch(`${API_URL}${path}`, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });

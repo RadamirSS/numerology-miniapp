@@ -1,13 +1,8 @@
-import { useEffect, useState } from "react";
-import { postJSON, getJSON, normalizeImageUrl } from "../api";
+import { useEffect } from "react";
+import { postJSON, normalizeImageUrl } from "../api";
 import type { MatrixState } from "../App";
 import { formatBirthDateInput } from "../utils/format";
-
-declare global {
-  interface Window {
-    Telegram?: any;
-  }
-}
+import { useUserStore } from "../store/userStore";
 
 interface Props {
   state: MatrixState;
@@ -15,19 +10,14 @@ interface Props {
 }
 
 export default function MatrixPage({ state, setState }: Props) {
-  const [userBirthDate, setUserBirthDate] = useState<string | null>(null);
-
+  const { profile } = useUserStore();
+  
+  // Автоматически подставляем дату из профиля, если она есть и поле пустое
   useEffect(() => {
-    const tg = window.Telegram?.WebApp;
-    const id = tg?.initDataUnsafe?.user?.id;
-    if (!id) return;
-
-    getJSON(`/users/by-telegram/${id}`)
-      .then((u) => setUserBirthDate(u.birth_date))
-      .catch(() => {
-        setUserBirthDate(null);
-      });
-  }, []);
+    if (profile?.birth_date && !state.date) {
+      setState((prev) => ({ ...prev, date: profile.birth_date }));
+    }
+  }, [profile?.birth_date, state.date]);
 
   function handleDateChange(value: string) {
     const formatted = formatBirthDateInput(value);
@@ -80,14 +70,17 @@ export default function MatrixPage({ state, setState }: Props) {
         {state.loading ? "Считаем..." : "Рассчитать по дате"}
       </button>
 
-      {userBirthDate && (
+      {profile?.birth_date && profile.birth_date !== state.date && (
         <button
           className="primary-button"
           style={{ marginTop: 8 }}
-          onClick={() => runMatrix(userBirthDate)}
+          onClick={() => {
+            setState((prev) => ({ ...prev, date: profile.birth_date }));
+            runMatrix(profile.birth_date);
+          }}
           disabled={state.loading}
         >
-          Пользователь ({userBirthDate})
+          Использовать мою дату ({profile.birth_date})
         </button>
       )}
 

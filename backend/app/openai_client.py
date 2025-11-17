@@ -139,3 +139,4 @@ def generate_ai_interpretation(profile: dict, chunks: List[dict]) -> str:
         raise Exception(f"Ошибка генерации интерпретации: {str(e)}")
 
 
+

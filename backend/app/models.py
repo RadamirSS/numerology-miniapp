@@ -28,5 +28,8 @@ class User(Base):
     telegram_last_name = Column(String, nullable=True)
     telegram_raw = Column(Text, nullable=True)
     
+    # Аватар пользователя (base64 или URL)
+    avatar_url = Column(Text, nullable=True)
+    
     # Служебное поле
     created_at = Column(DateTime(timezone=True), server_default=func.now())

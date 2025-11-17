@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, EmailStr
+from typing import Optional
 from .db import get_db
 from . import models
 
@@ -20,7 +22,16 @@ def user_to_dict(user: models.User) -> dict:
         "telegram_first_name": user.telegram_first_name,
         "telegram_last_name": user.telegram_last_name,
         "is_email_verified": user.is_email_verified,
+        "avatar_url": getattr(user, "avatar_url", None),
     }
+
+
+class UpdateProfileRequest(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    birth_date: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 
 @router.get("/by-telegram/{telegram_id}")
@@ -36,4 +47,76 @@ def get_user_by_email(email: str, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    return user_to_dict(user)
+
+
+@router.put("/{user_id}")
+def update_user(user_id: int, payload: UpdateProfileRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Обновляем только переданные поля
+    if payload.name is not None:
+        user.name = payload.name
+    if payload.email is not None:
+        # Проверяем, что email не занят другим пользователем
+        existing = db.query(models.User).filter(
+            models.User.email == payload.email,
+            models.User.id != user_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already taken")
+        user.email = payload.email
+    if payload.phone is not None:
+        user.phone = payload.phone
+    if payload.birth_date is not None:
+        user.birth_date = payload.birth_date
+    if payload.avatar_url is not None and hasattr(user, "avatar_url"):
+        user.avatar_url = payload.avatar_url
+    
+    db.commit()
+    db.refresh(user)
+    return user_to_dict(user)
+
+
+@router.post("/by-telegram/{telegram_id}/create-or-update")
+def create_or_update_user_by_telegram(telegram_id: int, payload: UpdateProfileRequest, db: Session = Depends(get_db)):
+    """Создаёт или обновляет пользователя по Telegram ID"""
+    user = db.query(models.User).filter(models.User.telegram_id == telegram_id).first()
+    
+    if not user:
+        # Создаём нового пользователя
+        user = models.User(
+            telegram_id=telegram_id,
+            name=payload.name or "Пользователь",
+            email=payload.email or f"user_{telegram_id}@telegram.local",
+            phone=payload.phone,
+            birth_date=payload.birth_date or "",
+            tariff=None,
+        )
+        if payload.avatar_url is not None and hasattr(user, "avatar_url"):
+            user.avatar_url = payload.avatar_url
+        db.add(user)
+    else:
+        # Обновляем существующего
+        if payload.name is not None:
+            user.name = payload.name
+        if payload.email is not None:
+            existing = db.query(models.User).filter(
+                models.User.email == payload.email,
+                models.User.id != user.id
+            ).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="Email already taken")
+            user.email = payload.email
+        if payload.phone is not None:
+            user.phone = payload.phone
+        if payload.birth_date is not None:
+            user.birth_date = payload.birth_date
+        if payload.avatar_url is not None and hasattr(user, "avatar_url"):
+            user.avatar_url = payload.avatar_url
+    
+    db.commit()
+    db.refresh(user)
     return user_to_dict(user)
