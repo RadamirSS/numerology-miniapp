@@ -24,6 +24,7 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0);
 }
 
 .tabbar {
@@ -99,6 +100,7 @@ button:not(.primary-button):active {
   padding: 16px;
   padding-bottom: 8px;
   position: relative;
+  margin-top: 8px;
 }
 
 .app-title {

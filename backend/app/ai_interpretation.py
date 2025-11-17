@@ -241,7 +241,7 @@ def build_query_text_from_profile(profile: Dict) -> str:
     return text
 
 
-def get_top_chunks(query_text: str, k: int = 20) -> List[Dict]:
+def get_top_chunks(query_text: str, k: int = 10) -> List[Dict]:
     """
     Найти top-k наиболее релевантных чанков по косинусному сходству.
     
@@ -301,7 +301,7 @@ async def ai_interpretation(payload: AIInterpretationRequest, db: Session = Depe
         query_text = build_query_text_from_profile(profile)
         
         # 5. Находим релевантные чанки
-        top_chunks = get_top_chunks(query_text, k=20)
+        top_chunks = get_top_chunks(query_text, k=10)
         logger.info(f"Найдено {len(top_chunks)} релевантных чанков")
         
         # 6. Генерируем интерпретацию

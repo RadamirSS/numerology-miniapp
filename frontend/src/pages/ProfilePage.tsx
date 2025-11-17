@@ -14,7 +14,7 @@ declare global {
 }
 
 export default function ProfilePage() {
-  const { profile, loading, error, loadProfileFromTelegram, updateProfile } = useUserStore();
+  const { profile, loading, error, loadProfileFromTelegram, updateProfile, setProfile } = useUserStore();
   const [isEditing, setIsEditing] = useState(false);
   const [isTariffModalOpen, setTariffModalOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
@@ -223,9 +223,50 @@ export default function ProfilePage() {
   }
 
   // Обработка выбора тарифа
-  function handleSelectTariff(tariffId: string) {
-    // TODO: позже здесь будет переход к оплате
-    setTariffModalOpen(false);
+  async function handleSelectTariff(tariffId: string) {
+    try {
+      // Если профиля нет, создаём временный для сохранения тарифа
+      if (!profile) {
+        const tg = window.Telegram?.WebApp;
+        const tgUser = tg?.initDataUnsafe?.user;
+        if (tgUser?.id) {
+          // Создаём профиль с тарифом через create-or-update
+          await updateProfile({
+            name: tgUser.first_name || 'Пользователь',
+            email: '',
+            phone: null,
+            birth_date: '',
+            tariff: tariffId,
+            telegram_id: tgUser.id,
+            telegram_username: tgUser.username || null,
+            telegram_first_name: tgUser.first_name || null,
+            telegram_last_name: tgUser.last_name || null,
+            is_email_verified: false,
+          });
+        } else {
+          // Если нет Telegram-пользователя, просто сохраняем локально
+          setProfile({
+            id: 0,
+            name: 'Пользователь',
+            email: '',
+            phone: null,
+            birth_date: '',
+            tariff: tariffId,
+            telegram_id: null,
+            telegram_username: null,
+            telegram_first_name: null,
+            telegram_last_name: null,
+            is_email_verified: false,
+          });
+        }
+      } else {
+        // Обновляем существующий профиль
+        await updateProfile({ tariff: tariffId });
+      }
+      setTariffModalOpen(false);
+    } catch (err: any) {
+      alert(err.message || "Ошибка сохранения тарифа");
+    }
   }
 
   const avatarDisplayUrl = getAvatarDisplayUrl();
@@ -483,21 +524,19 @@ export default function ProfilePage() {
           </div>
 
           {/* Тариф */}
-          {profile && (
-            <div className="profile-tariff" style={{ marginTop: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                <span className="profile-tariff__label"><strong>Текущий тариф:</strong></span>
-                <span className="profile-tariff__value">{getTariffDisplayName(profile.tariff)}</span>
-              </div>
-              <button 
-                className="primary-button" 
-                onClick={() => setTariffModalOpen(true)}
-                style={{ marginTop: 8, width: "auto", minWidth: "150px" }}
-              >
-                Изменить тариф
-              </button>
+          <div className="profile-tariff" style={{ marginTop: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <span className="profile-tariff__label"><strong>Текущий тариф:</strong></span>
+              <span className="profile-tariff__value">{getTariffDisplayName(profile?.tariff || null)}</span>
             </div>
-          )}
+            <button 
+              className="primary-button" 
+              onClick={() => setTariffModalOpen(true)}
+              style={{ marginTop: 8, width: "auto", minWidth: "150px" }}
+            >
+              {profile?.tariff ? "Изменить тариф" : "Выбрать тариф"}
+            </button>
+          </div>
         </div>
 
         {/* Кнопки управления */}

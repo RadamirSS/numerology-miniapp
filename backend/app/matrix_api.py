@@ -41,15 +41,36 @@ def get_matrix_data(payload: MatrixRequest):
 @router.post("/image")
 def get_matrix_image(payload: MatrixRequest):
     try:
+        safe_date = payload.birth_date.replace(".", "_")
+        filename = f"matrix_{safe_date}.png"
+        filepath = os.path.join(STATIC_DIR, filename)
+
+        # Проверяем, существует ли уже кэшированный файл
+        if os.path.exists(filepath):
+            # Файл уже существует, возвращаем его URL без пересчёта
+            if BASE_URL:
+                url = f"{BASE_URL.rstrip('/')}/static/{filename}"
+            else:
+                # локально фронт ходит на http://localhost:8000
+                url = f"http://localhost:8000/static/{filename}"
+
+            # Добавляем интерпретации цифр в ответ (пока заглушки)
+            digit_interpretations = {
+                str(d): f"Интерпретация цифры {d} (заглушка)"
+                for d in range(1, 10)
+            }
+
+            return {
+                "image_url": url,
+                "digit_interpretations": digit_interpretations
+            }
+
+        # Файла нет, нужно вычислить и нарисовать матрицу
         m = compute_matrix(payload.birth_date)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     try:
-        safe_date = payload.birth_date.replace(".", "_")
-        filename = f"matrix_{safe_date}.png"
-        filepath = os.path.join(STATIC_DIR, filename)
-
         # Определяем путь к фоновому изображению
         backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         background_path = os.path.join(backend_dir, "man.png")

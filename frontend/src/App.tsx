@@ -78,6 +78,10 @@ function App() {
 
   // Загрузка профиля при монтировании
   useEffect(() => {
+    const tg = (window as any).Telegram?.WebApp;
+    if (tg && typeof tg.ready === 'function') {
+      tg.ready();
+    }
     loadProfileFromTelegram();
   }, []);
 
@@ -203,23 +207,24 @@ function App() {
       <div className="app-header">
         <h1 className="app-title">Numerolog Mini App</h1>
         <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8 }}>
-          {/* Аватар с меню */}
-          {avatarUrl && (
-            <div style={{ position: "relative" }}>
-              <div
-                onClick={() => setAvatarMenuOpen(!avatarMenuOpen)}
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: "50%",
-                  overflow: "hidden",
-                  cursor: "pointer",
-                  border: "2px solid var(--gold)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
+          {/* Аватар с меню - показывается всегда */}
+          <div style={{ position: "relative" }}>
+            <div
+              onClick={() => setAvatarMenuOpen(!avatarMenuOpen)}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                overflow: "hidden",
+                cursor: "pointer",
+                border: "2px solid var(--gold)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "rgba(1, 12, 10, 0.9)",
+              }}
+            >
+              {avatarUrl ? (
                 <img
                   src={avatarUrl}
                   alt="Аватар"
@@ -229,54 +234,56 @@ function App() {
                     objectFit: "cover",
                   }}
                 />
-              </div>
-              
-              {/* Меню смены аватара */}
-              {avatarMenuOpen && (
-                <div
-                  ref={avatarMenuRef}
-                  style={{
-                    position: "absolute",
-                    top: "100%",
-                    right: 0,
-                    marginTop: 8,
-                    backgroundColor: "var(--bg-card)",
-                    border: "1px solid var(--gold)",
-                    borderRadius: 8,
-                    padding: 8,
-                    zIndex: 1001,
-                    minWidth: 150,
-                    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)",
-                  }}
-                >
-                  <button
-                    onClick={() => {
-                      fileInputRef.current?.click();
-                      setAvatarMenuOpen(false);
-                    }}
-                    style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      background: "transparent",
-                      border: "none",
-                      color: "var(--text-main)",
-                      cursor: "pointer",
-                      textAlign: "left",
-                      borderRadius: 4,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = "rgba(242, 201, 76, 0.1)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "transparent";
-                    }}
-                  >
-                    Сменить аватар
-                  </button>
-                </div>
+              ) : (
+                <span style={{ fontSize: 16 }}>👤</span>
               )}
             </div>
-          )}
+            
+            {/* Меню смены аватара */}
+            {avatarMenuOpen && (
+              <div
+                ref={avatarMenuRef}
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  right: 0,
+                  marginTop: 8,
+                  backgroundColor: "var(--bg-card)",
+                  border: "1px solid var(--gold)",
+                  borderRadius: 8,
+                  padding: 8,
+                  zIndex: 1001,
+                  minWidth: 150,
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)",
+                }}
+              >
+                <button
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                    setAvatarMenuOpen(false);
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-main)",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    borderRadius: 4,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "rgba(242, 201, 76, 0.1)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                >
+                  Сменить аватар
+                </button>
+              </div>
+            )}
+          </div>
           
           <div
             className="app-user-pill"

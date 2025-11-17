@@ -42,7 +42,11 @@ export const useUserStore = create<UserStore>((set, get) => ({
   loadProfileFromTelegram: async () => {
     const tgUser = getTelegramUser();
     if (!tgUser?.id) {
-      set({ profile: null, error: 'Telegram user not found' });
+      // Если нет Telegram-пользователя, работаем как гость без ошибки
+      if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) {
+        console.warn('Telegram user not found. initDataUnsafe:', (window as any).Telegram?.WebApp?.initDataUnsafe);
+      }
+      set({ profile: null, error: null });
       return;
     }
 
