@@ -226,8 +226,9 @@ function App() {
 
   return (
     <div className="app-root">
-      {/* Шапка приложения */}
-      <div className="app-header">
+      <div className="safe-top">
+        {/* Шапка приложения */}
+        <div className="app-header">
         <h1 className="app-title">Numerolog Mini App</h1>
         <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8 }}>
           {/* Аватар с меню - показывается всегда */}
@@ -389,6 +390,7 @@ function App() {
         {tab === "profile" && (
           <ProfilePage />
         )}
+      </div>
       </div>
 
       <div className="tabbar">

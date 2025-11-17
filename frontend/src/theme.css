@@ -24,7 +24,15 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  padding-top: calc(env(safe-area-inset-top, 0) + 8px);
+}
+
+/* Единый класс для верхнего отступа под Telegram-шапкой и кнопкой закрытия */
+.safe-top {
+  /* 
+    env(safe-area-inset-top, 0px) — для вырезов/статуса,
+    56px — запас под кнопку закрытия Telegram + визуальный отступ
+  */
+  padding-top: calc(env(safe-area-inset-top, 0px) + 56px) !important;
 }
 
 .tabbar {
@@ -100,7 +108,6 @@ button:not(.primary-button):active {
   padding: 16px;
   padding-bottom: 8px;
   position: relative;
-  margin-top: 10px;
 }
 
 .app-title {
