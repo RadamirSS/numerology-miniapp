@@ -37,6 +37,19 @@ export default function ProfilePage() {
     }
   }, []);
 
+  // Обработка события для открытия модалки тарифов
+  useEffect(() => {
+    function handleOpenTariffModal() {
+      setTariffModalOpen(true);
+    }
+
+    window.addEventListener('profileTariffModalOpen', handleOpenTariffModal);
+
+    return () => {
+      window.removeEventListener('profileTariffModalOpen', handleOpenTariffModal);
+    };
+  }, []);
+
   // Синхронизация полей с профилем
   useEffect(() => {
     if (profile) {

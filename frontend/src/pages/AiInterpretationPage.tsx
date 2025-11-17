@@ -12,6 +12,9 @@ interface Props {
 
 export default function AiInterpretationPage({ state, setState }: Props) {
   const { profile } = useUserStore();
+  
+  // Проверка доступа по тарифу
+  const hasAccess = profile?.tariff === 'basic' || profile?.tariff === 'pro';
 
   // Автоматически подставляем дату из профиля, если она есть и поле пустое
   useEffect(() => {
@@ -116,6 +119,49 @@ export default function AiInterpretationPage({ state, setState }: Props) {
       : "ai_interpretation.pdf";
     
     doc.save(filename);
+  }
+
+  // Функция для перехода к выбору тарифа
+  function handleGoToTariffs() {
+    // Отправляем событие для переключения на вкладку профиля
+    window.dispatchEvent(new CustomEvent('switchTab', { detail: 'profile' }));
+    // Небольшая задержка для открытия модалки тарифов
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('openTariffModal'));
+    }, 300);
+  }
+
+  // Если нет доступа, показываем блок с сообщением
+  if (!hasAccess) {
+    return (
+      <div className="card">
+        <h2>AI интерпретация</h2>
+        <div
+          style={{
+            marginTop: 24,
+            padding: 24,
+            background: "rgba(1, 12, 10, 0.6)",
+            borderRadius: 12,
+            border: "1px solid var(--border-soft)",
+            textAlign: "center",
+          }}
+        >
+          <p style={{ fontSize: 16, color: "var(--text-main)", marginBottom: 16 }}>
+            Доступ к AI интерпретации доступен в тарифах <strong>Базовый</strong> и <strong>Профессиональный</strong>.
+          </p>
+          <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 20 }}>
+            Выберите тариф в личном кабинете.
+          </p>
+          <button
+            onClick={handleGoToTariffs}
+            className="btn-primary"
+            style={{ width: "auto", minWidth: "200px" }}
+          >
+            Выбрать тариф
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

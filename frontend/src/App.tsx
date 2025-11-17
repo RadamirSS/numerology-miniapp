@@ -102,6 +102,29 @@ function App() {
     }
   }, [userMenuOpen, avatarMenuOpen]);
 
+  // Обработка событий для переключения табов и открытия модалки тарифов
+  useEffect(() => {
+    function handleSwitchTab(event: CustomEvent) {
+      setTab(event.detail as Tab);
+    }
+
+    function handleOpenTariffModal() {
+      setTab('profile');
+      // Открываем модалку тарифов через событие, которое обработает ProfilePage
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('profileTariffModalOpen'));
+      }, 100);
+    }
+
+    window.addEventListener('switchTab', handleSwitchTab as EventListener);
+    window.addEventListener('openTariffModal', handleOpenTariffModal);
+
+    return () => {
+      window.removeEventListener('switchTab', handleSwitchTab as EventListener);
+      window.removeEventListener('openTariffModal', handleOpenTariffModal);
+    };
+  }, []);
+
   // Обработка загрузки аватара
   async function handleAvatarSelect(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -212,8 +235,8 @@ function App() {
             <div
               onClick={() => setAvatarMenuOpen(!avatarMenuOpen)}
               style={{
-                width: 32,
-                height: 32,
+                width: 44,
+                height: 44,
                 borderRadius: "50%",
                 overflow: "hidden",
                 cursor: "pointer",
@@ -235,7 +258,7 @@ function App() {
                   }}
                 />
               ) : (
-                <span style={{ fontSize: 16 }}>👤</span>
+                <span style={{ fontSize: 20 }}>👤</span>
               )}
             </div>
             
@@ -286,9 +309,22 @@ function App() {
           </div>
           
           <div
-            className="app-user-pill"
             onClick={() => setUserMenuOpen(!userMenuOpen)}
-            style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}
+            style={{
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              backgroundColor: "rgba(0, 51, 34, 0.8)",
+              border: "2px solid var(--gold)",
+              color: "#ffffff",
+              borderRadius: 999,
+              padding: "6px 14px",
+              fontSize: 13,
+              fontWeight: 500,
+              whiteSpace: "nowrap",
+              boxShadow: "0 2px 8px rgba(242, 201, 76, 0.2)",
+            }}
           >
             <span>{displayName}</span>
           </div>
@@ -344,11 +380,11 @@ function App() {
         {tab === "matrix" && (
           <MatrixPage state={matrixState} setState={setMatrixState} />
         )}
-        {tab === "calculators" && (
-          <CalculatorsPage state={calcState} setState={setCalcState} />
-        )}
         {tab === "ai" && (
           <AiInterpretationPage state={aiState} setState={setAiState} />
+        )}
+        {tab === "calculators" && (
+          <CalculatorsPage state={calcState} setState={setCalcState} />
         )}
         {tab === "profile" && (
           <ProfilePage />
@@ -363,16 +399,16 @@ function App() {
           Матрица
         </button>
         <button
-          className={tab === "calculators" ? "active" : ""}
-          onClick={() => setTab("calculators")}
-        >
-          Калькуляторы
-        </button>
-        <button
           className={tab === "ai" ? "active" : ""}
           onClick={() => setTab("ai")}
         >
           AI интерпретация
+        </button>
+        <button
+          className={tab === "calculators" ? "active" : ""}
+          onClick={() => setTab("calculators")}
+        >
+          Калькуляторы
         </button>
         <button
           className={tab === "profile" ? "active" : ""}

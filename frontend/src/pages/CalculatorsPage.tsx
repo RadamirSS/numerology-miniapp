@@ -167,6 +167,10 @@ function renderInterpretation(textOrHtml: string, isPythagoras: boolean = false)
 
 export default function CalculatorsPage({ state, setState }: Props) {
   const { profile } = useUserStore();
+  
+  // Проверка доступа по тарифу
+  const hasAccess = profile?.tariff === 'pro';
+  
   // Выбранный калькулятор (ещё не подтверждён кнопкой)
   const [selectedCalculatorId, setSelectedCalculatorId] = useState<string>(
     state.currentCalc || "money_code"
@@ -238,6 +242,49 @@ export default function CalculatorsPage({ state, setState }: Props) {
   // Старая функция runCalc оставляем для совместимости с кнопкой "Пользователь"
   async function runCalc(birth_date: string) {
     await handleCalculate(birth_date);
+  }
+
+  // Функция для перехода к выбору тарифа
+  function handleGoToTariffs() {
+    // Отправляем событие для переключения на вкладку профиля
+    window.dispatchEvent(new CustomEvent('switchTab', { detail: 'profile' }));
+    // Небольшая задержка для открытия модалки тарифов
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('openTariffModal'));
+    }, 300);
+  }
+
+  // Если нет доступа, показываем блок с сообщением
+  if (!hasAccess) {
+    return (
+      <div className="card">
+        <h2>Калькуляторы</h2>
+        <div
+          style={{
+            marginTop: 24,
+            padding: 24,
+            background: "rgba(1, 12, 10, 0.6)",
+            borderRadius: 12,
+            border: "1px solid var(--border-soft)",
+            textAlign: "center",
+          }}
+        >
+          <p style={{ fontSize: 16, color: "var(--text-main)", marginBottom: 16 }}>
+            Раздел «Калькуляторы» доступен в тарифе <strong>Профессиональный</strong>.
+          </p>
+          <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 20 }}>
+            Выберите тариф в личном кабинете.
+          </p>
+          <button
+            onClick={handleGoToTariffs}
+            className="btn-primary"
+            style={{ width: "auto", minWidth: "200px" }}
+          >
+            Перейти к тарифам
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
