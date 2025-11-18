@@ -1,5 +1,10 @@
-const API_URL =
-  import.meta.env.VITE_API_URL?.replace(/\/+$/, "") || "";
+// Поддержка обоих вариантов переменных окружения для обратной совместимости
+const rawApiUrl =
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  "";
+
+const API_URL = rawApiUrl.replace(/\/+$/, "");
 
 export function normalizeImageUrl(raw: string): string {
   if (!raw) return "";
