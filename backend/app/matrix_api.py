@@ -66,17 +66,24 @@ def get_matrix_image(payload: MatrixRequest):
             }
 
         # Файла нет, нужно вычислить и нарисовать матрицу
-        m = compute_matrix(payload.birth_date)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        try:
+            m = compute_matrix(payload.birth_date)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
-    try:
         # Определяем путь к фоновому изображению
         backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         background_path = os.path.join(backend_dir, "man.png")
         
+        # Проверяем существование фонового изображения
+        if not os.path.exists(background_path):
+            raise HTTPException(status_code=500, detail="Фоновое изображение не найдено")
+        
         # ВАЖНО: передаём filename как именованный аргумент
-        draw_matrix(m, filename=filepath, background_path=background_path)
+        try:
+            draw_matrix(m, filename=filepath, background_path=background_path)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Ошибка при создании изображения: {str(e)}")
 
         # Формируем URL для фронта
         if BASE_URL:
@@ -95,5 +102,7 @@ def get_matrix_image(payload: MatrixRequest):
             "image_url": url,
             "digit_interpretations": digit_interpretations
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка при создании изображения: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Неожиданная ошибка: {str(e)}")

@@ -32,6 +32,7 @@ class UpdateProfileRequest(BaseModel):
     phone: Optional[str] = None
     birth_date: Optional[str] = None
     avatar_url: Optional[str] = None
+    tariff: Optional[str] = None
 
 
 @router.get("/by-telegram/{telegram_id}")
@@ -72,51 +73,75 @@ def update_user(user_id: int, payload: UpdateProfileRequest, db: Session = Depen
         user.phone = payload.phone
     if payload.birth_date is not None:
         user.birth_date = payload.birth_date
+    if payload.tariff is not None:
+        user.tariff = payload.tariff
     if payload.avatar_url is not None and hasattr(user, "avatar_url"):
         user.avatar_url = payload.avatar_url
     
-    db.commit()
-    db.refresh(user)
-    return user_to_dict(user)
+    try:
+        db.commit()
+        db.refresh(user)
+        return user_to_dict(user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка при обновлении пользователя: {str(e)}")
 
 
 @router.post("/by-telegram/{telegram_id}/create-or-update")
 def create_or_update_user_by_telegram(telegram_id: int, payload: UpdateProfileRequest, db: Session = Depends(get_db)):
     """Создаёт или обновляет пользователя по Telegram ID"""
-    user = db.query(models.User).filter(models.User.telegram_id == telegram_id).first()
-    
-    if not user:
-        # Создаём нового пользователя
-        user = models.User(
-            telegram_id=telegram_id,
-            name=payload.name or "Пользователь",
-            email=payload.email or f"user_{telegram_id}@telegram.local",
-            phone=payload.phone,
-            birth_date=payload.birth_date or "",
-            tariff=None,
-        )
-        if payload.avatar_url is not None and hasattr(user, "avatar_url"):
-            user.avatar_url = payload.avatar_url
-        db.add(user)
-    else:
-        # Обновляем существующего
-        if payload.name is not None:
-            user.name = payload.name
-        if payload.email is not None:
-            existing = db.query(models.User).filter(
-                models.User.email == payload.email,
-                models.User.id != user.id
-            ).first()
-            if existing:
-                raise HTTPException(status_code=400, detail="Email already taken")
-            user.email = payload.email
-        if payload.phone is not None:
-            user.phone = payload.phone
-        if payload.birth_date is not None:
-            user.birth_date = payload.birth_date
-        if payload.avatar_url is not None and hasattr(user, "avatar_url"):
-            user.avatar_url = payload.avatar_url
-    
-    db.commit()
-    db.refresh(user)
-    return user_to_dict(user)
+    try:
+        user = db.query(models.User).filter(models.User.telegram_id == telegram_id).first()
+        
+        if not user:
+            # Создаём нового пользователя
+            # Генерируем уникальный email, если не передан
+            email = payload.email
+            if not email:
+                email = f"user_{telegram_id}@telegram.local"
+                # Проверяем, что такой email не занят
+                existing_email = db.query(models.User).filter(models.User.email == email).first()
+                if existing_email:
+                    email = f"user_{telegram_id}_{existing_email.id}@telegram.local"
+            
+            user = models.User(
+                telegram_id=telegram_id,
+                name=payload.name or "Пользователь",
+                email=email,
+                phone=payload.phone,
+                birth_date=payload.birth_date or "",
+                tariff=payload.tariff,
+            )
+            # Устанавливаем avatar_url, если поле существует в модели
+            if hasattr(models.User, "avatar_url") and payload.avatar_url is not None:
+                user.avatar_url = payload.avatar_url
+            db.add(user)
+        else:
+            # Обновляем существующего
+            if payload.name is not None:
+                user.name = payload.name
+            if payload.email is not None:
+                existing = db.query(models.User).filter(
+                    models.User.email == payload.email,
+                    models.User.id != user.id
+                ).first()
+                if existing:
+                    raise HTTPException(status_code=400, detail="Email already taken")
+                user.email = payload.email
+            if payload.phone is not None:
+                user.phone = payload.phone
+            if payload.birth_date is not None:
+                user.birth_date = payload.birth_date
+            if payload.tariff is not None:
+                user.tariff = payload.tariff
+            if hasattr(models.User, "avatar_url") and payload.avatar_url is not None:
+                user.avatar_url = payload.avatar_url
+        
+        db.commit()
+        db.refresh(user)
+        return user_to_dict(user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка при создании/обновлении пользователя: {str(e)}")
